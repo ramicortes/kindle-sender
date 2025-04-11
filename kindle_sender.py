@@ -8,12 +8,11 @@ import datetime
 from article_downloader import extract_article
 from epub_generator import create_epub
 from email_sender import send_email
-from config_manager import load_config, update_config
+from config_manager import load_config
 
 def main():
     parser = argparse.ArgumentParser(description='Send articles to Kindle')
     parser.add_argument('url', nargs='?', help='URL of the article to send')
-    parser.add_argument('--configure', action='store_true', help='Configure email settings')
     parser.add_argument('--no-send', action='store_true', help='Only generate ePub file without sending email')
     parser.add_argument('--output-dir', help='Directory to save the ePub file (default: temp directory)')
     parser.add_argument('--debug-extraction', action='store_true', help='Only extract and print the article content for debugging')
@@ -22,11 +21,6 @@ def main():
 
     # Load config
     config = load_config()
-
-    if args.configure:
-        # Allow user to update config
-        update_config(config)
-        sys.exit(0)
 
     if not args.url:
         parser.print_help()
@@ -52,7 +46,7 @@ def main():
         else:
             # Check if configuration is complete for sending email
             if not config['Email']['from_email'] or not config['Email']['password'] or not config['Email']['kindle_email']:
-                print("Email configuration incomplete. Please run with --configure to set up.")
+                print("Email configuration incomplete. Please check your .env file.")
                 print(f"ePub file generated successfully at: {output_path}")
                 sys.exit(1)
 
