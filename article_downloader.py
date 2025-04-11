@@ -13,10 +13,6 @@ def extract_article(url):
     """Extract article content from URL."""
     print("Extracting article content...")
 
-    # Ensure the URL is from cenital.com
-    if "cenital.com" not in urlparse(url).netloc:
-        raise ValueError("This downloader only supports articles from cenital.com")
-
     # Try newspaper3k if available
     if newspaper_available:
         try:
@@ -44,12 +40,12 @@ def extract_article(url):
         # Get title
         title = soup.find('h1').get_text(strip=True) if soup.find('h1') else urlparse(url).netloc
 
-        # Remove non-content elements specific to cenital.com
+        # Remove non-content elements
         for element in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']):
             element.decompose()
 
-        # Target the main content area (adjusted for cenital.com structure)
-        main_content = soup.find('div', class_='article-content')  # Replace with actual class or ID
+        # Target the main content area
+        main_content = soup.find('div', class_='article-content')  # Replace with actual class or ID if needed
         if not main_content:
             raise ValueError("Could not locate main content on the page")
 
