@@ -2,6 +2,8 @@
 import argparse
 import os
 import sys
+import time
+from blessed import Terminal
 
 # Import from our modules
 from config_manager import load_config
@@ -20,6 +22,7 @@ class InteractiveMode:
         self.current_file = None
         self.current_title = None
         self.current_content = None
+        self.term = Terminal()  # Initialize blessed terminal
     
     def reset_article(self):
         """Reset the current article data."""
@@ -31,6 +34,57 @@ class InteractiveMode:
     def get_source_reference(self):
         """Get the source reference for the current article."""
         return format_source_reference(self.current_url, self.current_file)
+    
+    def _display_menu(self, title, options, selected_idx=0):
+        """Display a menu with arrow key navigation.
+        
+        Args:
+            title: The title to display above the menu.
+            options: List of options to display.
+            selected_idx: The initially selected index.
+            
+        Returns:
+            The selected index.
+        """
+        # Clear screen for better UI
+        print(self.term.clear)
+        
+        with self.term.cbreak(), self.term.hidden_cursor():
+            # Initial render
+            selected = selected_idx
+            
+            while True:
+                # Clear screen and display title
+                print(self.term.home + self.term.clear)
+                print(f"\n{title}\n")
+                
+                # Display options with selected option highlighted
+                for i, option in enumerate(options):
+                    if i == selected:
+                        print(f" {self.term.black_on_white}→ {option}{self.term.normal}")
+                    else:
+                        print(f"  {option}")
+                
+                # Display navigation instructions
+                print(f"\n{self.term.dim}Use ↑/↓ arrows to navigate, Enter to select{self.term.normal}")
+                
+                # Wait for key press
+                key = self.term.inkey()
+                
+                # Handle navigation
+                if key.code == self.term.KEY_UP:
+                    selected = max(0, selected - 1)
+                elif key.code == self.term.KEY_DOWN:
+                    selected = min(len(options) - 1, selected + 1)
+                elif key.code == self.term.KEY_ENTER:
+                    return selected
+                elif key.code == self.term.KEY_ESCAPE or key == 'q':
+                    # Allow escape or 'q' to exit
+                    if "Exit" in options:
+                        return options.index("Exit")
+                    return len(options) - 1  # Assume last option is exit or cancel
+                elif key == 'h':
+                    self._show_help_overlay()
     
     def run(self):
         """Run the interactive mode interface."""
@@ -47,11 +101,40 @@ class InteractiveMode:
     
     def _print_welcome_message(self):
         """Print the welcome message and usage instructions."""
-        print("\n===== Kindle Article Sender =====")
-        print("\nUsage Instructions:")
-        print("  Interactive Mode: ./kindle_sender.py")
-        print("  Command Line Mode: ./kindle_sender.py [URL] [options]")
-        print("  Help: ./kindle_sender.py --help")
+        # Clear screen for a clean start
+        print(self.term.clear)
+        
+        # Create a colorful title with box styling
+        title = "Kindle Article Sender"
+        box_width = len(title) + 8
+        
+        print(f"\n{self.term.bright_blue}{'═' * box_width}")
+        print(f"╔{'═' * (box_width - 2)}╗")
+        print(f"║{' ' * ((box_width - 2 - len(title)) // 2)}{self.term.bold_white}{title}{self.term.bright_blue}{' ' * ((box_width - 2 - len(title) + 1) // 2)}║")
+        print(f"╚{'═' * (box_width - 2)}╝{self.term.normal}")
+        
+        # More informative welcome message
+        print(f"\n{self.term.bright_green}Welcome!{self.term.normal}")
+        print("This tool helps you send web articles and HTML files to your Kindle device")
+        print("for a better reading experience without distractions.")
+        
+        # Feature highlights
+        print(f"\n{self.term.bright_yellow}Features:{self.term.normal}")
+        print(f"  {self.term.yellow}•{self.term.normal} Extract content from web URLs")
+        print(f"  {self.term.yellow}•{self.term.normal} Process local HTML files")
+        print(f"  {self.term.yellow}•{self.term.normal} Generate ePub files")
+        print(f"  {self.term.yellow}•{self.term.normal} Send articles directly to your Kindle")
+        
+        # Navigation tip
+        print(f"\n{self.term.bright_cyan}Navigation:{self.term.normal}")
+        print(f"  {self.term.cyan}•{self.term.normal} Use {self.term.bold}↑/↓{self.term.normal} arrow keys to move between options")
+        print(f"  {self.term.cyan}•{self.term.normal} Press {self.term.bold}Enter{self.term.normal} to select an option")
+        print(f"  {self.term.cyan}•{self.term.normal} Press {self.term.bold}h{self.term.normal} at any time for help")
+        
+        # Add a short wait for user to see the welcome message
+        print(f"\n{self.term.italic}Press any key to continue...{self.term.normal}")
+        with self.term.cbreak():
+            self.term.inkey()
     
     def _choose_article_source(self):
         """Present options to choose an article source."""
@@ -62,55 +145,75 @@ class InteractiveMode:
             
             # Display all available sources
             sources = self.article_manager.get_available_sources()
-            for i, (source_id, source_name) in enumerate(sources, 1):
-                print(f"{i}. From a {source_name}")
-            print(f"{len(sources) + 1}. Exit")
-            
-            source_choice = input(f"\nEnter your choice (1-{len(sources) + 1}): ").strip()
+            options = [f"From a {source_name}" for _, source_name in sources] + ["Exit"]
+            choice_idx = self._display_menu("Choose Article Source", options)
             
             # Check for exit option
-            if source_choice == str(len(sources) + 1):
+            if choice_idx == len(sources):
                 print("Exiting.")
                 sys.exit(0)
             
-            # Validate and process choice
-            try:
-                choice_idx = int(source_choice) - 1
-                if choice_idx < 0 or choice_idx >= len(sources):
-                    print("Invalid choice. Please try again.")
-                    continue
-                
-                # Get source ID for the selected choice
-                selected_source_id = sources[choice_idx][0]
-                
-                # Handle source-specific import
-                if selected_source_id == "url":
-                    choosing_source = self._handle_url_source()
-                elif selected_source_id == "html_file":
-                    choosing_source = self._handle_file_source()
-                else:
-                    print(f"Support for {sources[choice_idx][1]} is not yet implemented.")
-                    continue
-                    
-            except ValueError:
-                print("Invalid choice. Please enter a number.")
+            # Get source ID for the selected choice
+            selected_source_id = sources[choice_idx][0]
+            
+            # Handle source-specific import
+            if selected_source_id == "url":
+                choosing_source = self._handle_url_source()
+            elif selected_source_id == "html_file":
+                choosing_source = self._handle_file_source()
+            else:
+                print(f"Support for {sources[choice_idx][1]} is not yet implemented.")
+                continue
     
     def _handle_url_source(self):
         """Handle URL source selection."""
-        # URL mode
-        self.current_url = input("\nEnter article URL: ").strip()
+        # Clear screen for better UI
+        print(self.term.clear)
+        print(f"\n{self.term.bright_cyan}Enter Article URL{self.term.normal}")
+        print(f"\n{self.term.dim}(Press Enter with empty input to go back){self.term.normal}\n")
+        
+        # Create an input area with border
+        print(f"{self.term.bright_blue}┌{'─' * 50}┐{self.term.normal}")
+        print(f"{self.term.bright_blue}│{self.term.normal} ", end="")
+        
+        # Get input with cursor positioned correctly
+        with self.term.location(x=2, y=self.term.height // 2):
+            self.current_url = input("").strip()
+        
+        print(f"{self.term.bright_blue}└{'─' * 50}┘{self.term.normal}")
+        
+        # Check for empty input to go back
         if not self.current_url:
-            print("No URL provided. Returning to source selection.")
+            print(f"{self.term.yellow}No URL provided. Returning to source selection.{self.term.normal}")
+            with self.term.cbreak():
+                self.term.inkey(timeout=2)  # 2-second delay to read message
             return True
+        
+        # Show loading indicator
+        print(f"\n{self.term.bright_yellow}Extracting article...{self.term.normal}")
         
         # Extract article content
         try:
             self.current_title, self.current_content = self.article_manager.extract_from_url(self.current_url)
-            print(f"\nSuccessfully extracted: '{self.current_title}'")
+            
+            # Show success message with article title
+            print(f"\n{self.term.bright_green}✓ Successfully extracted:{self.term.normal} {self.term.bold}{self.current_title}{self.term.normal}")
+            
+            # Brief pause to show success message
+            with self.term.cbreak():
+                self.term.inkey(timeout=2)
+                
             return False  # Exit the choosing source loop
+            
         except Exception as e:
-            print(f"\nError: {e}")
+            # Show error message
+            print(f"\n{self.term.bright_red}✗ Error:{self.term.normal} {e}")
+            print(f"\n{self.term.dim}Press any key to try again...{self.term.normal}")
+            
             self.current_url = None
+            with self.term.cbreak():
+                self.term.inkey()
+                
             return True  # Stay in the choosing source loop
     
     def _handle_file_source(self):
@@ -124,117 +227,214 @@ class InteractiveMode:
         if not html_source.display_available_files(html_files):
             return True  # Stay in the choosing source loop if no files available
         
-        selecting_file = True
-        while selecting_file:
-            try:
-                file_choice = input("\nEnter file number (0 to go back): ").strip()
-                
-                if file_choice == '0':
-                    # Go back to source selection
-                    return True
-                    
-                file_choice = int(file_choice)
-                if file_choice < 1 or file_choice > len(html_files):
-                    print("Invalid selection. Please try again.")
-                    continue
-                
-                file_index = file_choice - 1
-                self.current_file = html_source.get_file_path(file_index, html_files)
-                
-                # Extract article content
-                try:
-                    self.current_title, self.current_content = self.article_manager.extract_from_file_path(self.current_file)
-                    return False  # Exit the choosing source loop
-                except Exception as e:
-                    print(f"\nError: {e}")
-                    self.current_file = None
-                    return True  # Stay in the choosing source loop
-                    
-            except ValueError:
-                print("Invalid input. Please enter a number.")
+        # Create list of options from HTML files and add a "Back" option
+        file_options = []
+        for i, file_info in enumerate(html_files):
+            # Extract just the filename for display
+            file_name = os.path.basename(file_info)
+            file_options.append(f"{file_name}")
+        
+        # Add back option
+        file_options.append("Go back")
+        
+        # Display menu for file selection
+        file_choice_idx = self._display_menu("Select HTML File", file_options)
+        
+        # Check if user selected "Go back"
+        if file_choice_idx == len(html_files):
+            return True  # Go back to source selection
+        
+        # Get the full file path from the chosen index
+        self.current_file = html_source.get_file_path(file_choice_idx, html_files)
+        
+        # Extract article content
+        try:
+            self.current_title, self.current_content = self.article_manager.extract_from_file_path(self.current_file)
+            return False  # Exit the choosing source loop
+        except Exception as e:
+            print(f"\nError: {e}")
+            self.current_file = None
+            return True  # Stay in the choosing source loop
     
     def _process_main_menu(self):
         """Display main menu and process user choice."""
-        print("\nWhat would you like to do?")
-        
         # Display all available output options
         outputs = self.publication_manager.get_available_outputs()
-        for i, (output_id, output_name) in enumerate(outputs, 1):
-            print(f"{i}. {output_name}")
-            
-        # Additional options
-        print(f"{len(outputs) + 1}. Work on a new article")
-        print(f"{len(outputs) + 2}. Exit")
-        
-        choice = input(f"\nEnter your choice (1-{len(outputs) + 2}): ").strip()
+        options = [output_name for _, output_name in outputs] + ["Work on a new article", "Exit"]
+        choice_idx = self._display_menu("Main Menu", options)
         
         # Check for work on new article option
-        if choice == str(len(outputs) + 1):
+        if choice_idx == len(outputs):
             # Reset to work on a new article
             self.reset_article()
             return True
         
         # Check for exit option
-        elif choice == str(len(outputs) + 2):
-            print("Exiting.")
+        elif choice_idx == len(outputs) + 1:
+            # Display exit animation
+            print(self.term.clear)
+            print(f"\n{self.term.bright_blue}Thank you for using Kindle Article Sender!{self.term.normal}")
+            print(f"{self.term.dim}Exiting...{self.term.normal}")
+            for _ in range(5):
+                print(f"{self.term.move_up()}{self.term.bright_blue}Thank you for using Kindle Article Sender!{self.term.normal}")
+                print(f"{self.term.dim}Exiting...{self.term.dim}{' ' * _}{self.term.normal}")
+                time.sleep(0.1)
             return False
         
-        # Process output choice
-        try:
-            choice_idx = int(choice) - 1
-            if choice_idx < 0 or choice_idx >= len(outputs):
-                print("Invalid choice. Please try again.")
-                return True
-            
-            # Get output ID for the selected choice
-            selected_output_id = outputs[choice_idx][0]
-            
-            # Handle the selected output
-            source_reference = self.get_source_reference()
-            
-            if selected_output_id == "print":
-                self.publication_manager.print_article(
-                    self.current_title,
-                    self.current_content,
-                    source_reference
-                )
-            elif selected_output_id == "epub":
-                # Ask for output directory
-                output_dir = input("Enter output directory (or press Enter for default/temp directory): ").strip()
-                self.publication_manager.create_epub(
-                    self.current_title,
-                    self.current_content,
-                    source_reference,
-                    output_dir if output_dir else None
-                )
-            elif selected_output_id == "kindle":
-                self.publication_manager.send_to_kindle(
-                    self.current_title,
-                    self.current_content,
-                    source_reference,
-                    self.current_file
-                )
-            else:
-                # Generic handling for new output types
-                self.publication_manager.process_with_output(
-                    selected_output_id,
-                    self.current_title,
-                    self.current_content,
-                    source_reference,
-                    self.current_file
-                )
-                
-        except ValueError:
-            print("Invalid choice. Please enter a number.")
-            return True
+        # Get output ID for the selected choice
+        selected_output_id = outputs[choice_idx][0]
         
-        # After each operation (except for choosing a new article or exit), ask if user wants to continue
-        print("\n")
-        continue_prompt = input("Press Enter to continue or type 'exit' to quit: ").strip().lower()
+        # Handle the selected output
+        source_reference = self.get_source_reference()
+        
+        # Clear screen and show processing message with spinner
+        print(self.term.clear)
+        print(f"\n{self.term.bright_cyan}Processing:{self.term.normal} {self.term.bold}{self.current_title}{self.term.normal}")
+        
+        spinner_chars = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
+        spinner_idx = 0
+        
+        def show_spinner(message):
+            """Display a loading spinner with a message."""
+            nonlocal spinner_idx
+            spinner = spinner_chars[spinner_idx % len(spinner_chars)]
+            spinner_idx += 1
+            print(f"{self.term.move_up(1)}\r{self.term.bright_yellow}{spinner} {message}...{' ' * 20}{self.term.normal}")
+            
+        # Process according to selected output
+        if selected_output_id == "print":
+            print("")  # Add space for spinner
+            show_spinner("Formatting article for display")
+            time.sleep(0.5)  # Simulate processing
+            
+            self.publication_manager.print_article(
+                self.current_title,
+                self.current_content,
+                source_reference
+            )
+            
+        elif selected_output_id == "epub":
+            print("")  # Add space for spinner
+            show_spinner("Preparing ePub creation")
+            time.sleep(0.5)  # Simulate processing
+            
+            # Clear spinner line
+            print(f"{self.term.move_up(1)}\r{' ' * 50}")
+            
+            # Ask for output directory with styled input
+            print(f"\n{self.term.bright_blue}┌{'─' * 50}┐{self.term.normal}")
+            print(f"{self.term.bright_blue}│{self.term.normal} Output directory (press Enter for default): ", end="")
+            output_dir = input("").strip()
+            print(f"{self.term.bright_blue}└{'─' * 50}┘{self.term.normal}")
+            
+            print("")  # Add space for spinner
+            show_spinner("Generating ePub file")
+            time.sleep(0.5)  # Simulate processing
+            show_spinner("Writing content")
+            time.sleep(0.3)  # Simulate processing
+            show_spinner("Finalizing ePub")
+            time.sleep(0.2)  # Simulate processing
+            
+            # Generate the ePub
+            result = self.publication_manager.create_epub(
+                self.current_title,
+                self.current_content,
+                source_reference,
+                output_dir if output_dir else None
+            )
+            
+            # Show success message
+            print(f"{self.term.move_up(1)}\r{self.term.bright_green}✓ ePub created successfully!{' ' * 30}{self.term.normal}")
+            
+        elif selected_output_id == "kindle":
+            print("")  # Add space for spinner
+            steps = ["Preparing article", "Generating ePub", "Establishing connection", "Sending to Kindle"]
+            
+            for step in steps:
+                show_spinner(step)
+                time.sleep(0.5)  # Simulate processing steps
+            
+            # Send to Kindle
+            self.publication_manager.send_to_kindle(
+                self.current_title,
+                self.current_content,
+                source_reference,
+                self.current_file
+            )
+            
+            # Show success message
+            print(f"{self.term.move_up(1)}\r{self.term.bright_green}✓ Article sent to Kindle!{' ' * 30}{self.term.normal}")
+            
+        else:
+            # Generic handling for new output types
+            print("")  # Add space for spinner
+            show_spinner(f"Processing with {options[choice_idx]}")
+            time.sleep(0.5)  # Simulate processing
+            
+            self.publication_manager.process_with_output(
+                selected_output_id,
+                self.current_title,
+                self.current_content,
+                source_reference,
+                self.current_file
+            )
+        
+        # After each operation, ask if user wants to continue with styled prompt
+        print(f"\n{self.term.bright_cyan}┌{'─' * 50}┐{self.term.normal}")
+        print(f"{self.term.bright_cyan}│{self.term.normal} Press {self.term.bold}Enter{self.term.normal} to continue or type {self.term.bold}exit{self.term.normal} to quit: ", end="")
+        continue_prompt = input("").strip().lower()
+        print(f"{self.term.bright_cyan}└{'─' * 50}┘{self.term.normal}")
+        
         if continue_prompt == 'exit':
+            # Display exit animation
+            print(self.term.clear)
+            print(f"\n{self.term.bright_blue}Thank you for using Kindle Article Sender!{self.term.normal}")
+            print(f"{self.term.dim}Exiting...{self.term.normal}")
+            for _ in range(5):
+                print(f"{self.term.move_up()}{self.term.bright_blue}Thank you for using Kindle Article Sender!{self.term.normal}")
+                print(f"{self.term.dim}Exiting...{self.term.dim}{' ' * _}{self.term.normal}")
+                time.sleep(0.1)
             return False
         
         return True
+    
+    def _show_help_overlay(self):
+        """Display a help overlay with keyboard shortcuts and tips."""
+        # Save current screen
+        with self.term.fullscreen(), self.term.cbreak(), self.term.hidden_cursor():
+            # Display help screen
+            print(self.term.clear)
+            
+            # Header
+            print(f"\n{self.term.bold_white}{self.term.center('Keyboard Shortcuts and Help')}{self.term.normal}")
+            print(f"{self.term.center('=' * 30)}\n")
+            
+            # Navigation shortcuts
+            print(f"{self.term.bright_yellow}Navigation{self.term.normal}")
+            print(f"  {self.term.bright_cyan}↑/↓{self.term.normal}: Move between options")
+            print(f"  {self.term.bright_cyan}Enter{self.term.normal}: Select the highlighted option")
+            print(f"  {self.term.bright_cyan}Esc/q{self.term.normal}: Go back or exit current menu")
+            print(f"  {self.term.bright_cyan}h{self.term.normal}: Show this help screen\n")
+            
+            # General tips
+            print(f"{self.term.bright_yellow}Tips{self.term.normal}")
+            print(f"  • You can paste URLs directly when prompted")
+            print(f"  • HTML files should be stored in the 'html_articles' folder")
+            print(f"  • Generated ePub files are saved in 'epub_output' by default")
+            print(f"  • Email settings can be configured in config.json\n")
+            
+            # Additional help
+            print(f"{self.term.bright_yellow}About{self.term.normal}")
+            print(f"  Kindle Article Sender helps you easily send web articles")
+            print(f"  and HTML files to your Kindle device for distraction-free reading.\n")
+            
+            # Press any key to continue
+            print(f"\n{self.term.center(f'{self.term.dim}Press any key to return...{self.term.normal}')}")
+            
+            # Wait for key press to exit help
+            self.term.inkey()
+            
+            # Return to the previous screen (no need to redraw, as we're using fullscreen context)
 
 
 class CommandLineMode:
