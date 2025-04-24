@@ -63,7 +63,7 @@ class HTMLFileSource(ArticleSource):
         if not file_path:
             raise ValueError("No file path provided.")
         
-        print(f"Extracting article content from file...")
+        # Removed duplicate print message
         return extract_from_file(file_path), file_path
     
     def get_available_files(self):
@@ -143,6 +143,7 @@ class ArticleManager:
         """Extract article from file path."""
         file_source = self.source_factory.get_source("html_file")
         (title, content), _ = file_source.extract(file_path)
+        print(f"Successfully extracted: '{title}'")
         return title, content
     
     def get_html_source(self):

@@ -89,6 +89,7 @@ def extract_from_file(file_path):
         # Try to find the main content
         # This is a simplified approach and may need adjustment for different HTML structures
         main_content = None
+        
         for selector in ['article', 'main', '.content', '.article-content', '.post-content']:
             main_content = soup.select_one(selector)
             if main_content:
@@ -109,7 +110,7 @@ def extract_from_file(file_path):
         if not content:
             raise ValueError("Could not extract article content from the file")
         
-        print(f"Successfully extracted: '{title}'")
+        # Only print 'Successfully extracted' once
         return title, content
     
     except Exception as e:

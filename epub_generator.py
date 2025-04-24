@@ -21,11 +21,6 @@ def create_epub(title, content, source_reference, output_dir=None, config=None):
     clean_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
     clean_title = re.sub(r'[-\s]+', '-', clean_title)
     
-    # Set metadata
-    book.set_identifier(f"article_{hash(title)}")
-    book.set_title(title)
-    book.set_language('en')
-    
     # Determine source information
     if source_reference.startswith("Local file:"):
         # For local files, use filename as author
@@ -36,6 +31,29 @@ def create_epub(title, content, source_reference, output_dir=None, config=None):
         domain = urlparse(source_reference).netloc
         author = domain if domain else "Unknown"
     
+    # Display and allow overriding of title and author
+    print("\n=== Article Information ===")
+    print(f"Title: {title}")
+    print(f"Author: {author}")
+    print("=========================")
+    
+    override = input("Do you want to override the title or author? (y/n): ").lower().strip()
+    if override == 'y':
+        new_title = input(f"Enter new title (or press Enter to keep '{title}'): ").strip()
+        if new_title:
+            title = new_title
+            # Update clean title for filename
+            clean_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+            clean_title = re.sub(r'[-\s]+', '-', clean_title)
+        
+        new_author = input(f"Enter new author (or press Enter to keep '{author}'): ").strip()
+        if new_author:
+            author = new_author
+    
+    # Set metadata
+    book.set_identifier(f"article_{hash(title)}")
+    book.set_title(title)
+    book.set_language('en')
     book.add_author(author)
     
     # Add content

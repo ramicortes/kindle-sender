@@ -144,7 +144,6 @@ class InteractiveMode:
                 # Extract article content
                 try:
                     self.current_title, self.current_content = self.article_manager.extract_from_file_path(self.current_file)
-                    print(f"\nSuccessfully extracted: '{self.current_title}'")
                     return False  # Exit the choosing source loop
                 except Exception as e:
                     print(f"\nError: {e}")
