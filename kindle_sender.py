@@ -2,223 +2,302 @@
 import argparse
 import os
 import sys
-import datetime
 
 # Import from our modules
-from article_downloader import extract_article, extract_from_file
-from epub_generator import create_epub
-from email_sender import send_email
 from config_manager import load_config
+from article_manager import ArticleManager
+from publication_manager import PublicationManager
+from utils import format_source_reference
 
-def rename_html_file(file_path):
-    """Rename a file by prepending '[SENT] ' to its filename."""
-    directory = os.path.dirname(file_path)
-    filename = os.path.basename(file_path)
+class InteractiveMode:
+    """Class to handle interactive mode operations."""
     
-    # Skip if already marked as sent
-    if filename.startswith('[SENT] '):
-        return file_path
+    def __init__(self, config):
+        self.config = config
+        self.article_manager = ArticleManager(config)
+        self.publication_manager = PublicationManager(config)
+        self.current_url = None
+        self.current_file = None
+        self.current_title = None
+        self.current_content = None
     
-    new_filename = f"[SENT] {filename}"
-    new_file_path = os.path.join(directory, new_filename)
+    def reset_article(self):
+        """Reset the current article data."""
+        self.current_url = None
+        self.current_file = None
+        self.current_title = None
+        self.current_content = None
     
-    try:
-        os.rename(file_path, new_file_path)
-        print(f"File renamed to: {new_filename}")
-        return new_file_path
-    except Exception as e:
-        print(f"Warning: Could not rename file: {e}")
-        return file_path
-
-def get_html_articles_dir(config):
-    """Get the HTML articles directory from config or use default."""
-    html_dir = config['Directories']['html_articles_dir']
-    if not html_dir:
-        # Use default directory if not specified
-        html_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'html_articles')
+    def get_source_reference(self):
+        """Get the source reference for the current article."""
+        return format_source_reference(self.current_url, self.current_file)
     
-    # Create directory if it doesn't exist
-    if not os.path.exists(html_dir):
-        print(f"Creating HTML articles directory at {html_dir}")
-        os.makedirs(html_dir)
+    def run(self):
+        """Run the interactive mode interface."""
+        self._print_welcome_message()
         
-    return html_dir
-
-def interactive_mode(config):
-    """Run the program in interactive mode with menu options."""
-    print("\n===== Kindle Article Sender =====")
-    print("\nUsage Instructions:")
-    print("  Interactive Mode: ./kindle_sender.py")
-    print("  Command Line Mode: ./kindle_sender.py [URL] [options]")
-    print("  Help: ./kindle_sender.py --help")
-    
-    continue_session = True
-    current_url = None
-    current_file = None
-    current_title = None
-    current_content = None
-    
-    while continue_session:
-        # Get article source if we don't have one
-        if current_url is None and current_file is None:
-            choosing_source = True
+        continue_session = True
+        while continue_session:
+            # Get article source if we don't have one
+            if self.current_title is None:
+                self._choose_article_source()
             
-            while choosing_source:
-                print("\nHow would you like to import an article?")
-                print("1. From a URL")
-                print("2. From a local HTML file")
-                print("3. Exit")
-                
-                source_choice = input("\nEnter your choice (1-3): ").strip()
-                
-                if source_choice == '1':
-                    # URL mode
-                    current_url = input("\nEnter article URL: ").strip()
-                    if not current_url:
-                        print("No URL provided. Returning to source selection.")
-                        continue
-                    
-                    # Extract article content
-                    try:
-                        current_title, current_content = extract_article(current_url)
-                        print(f"\nSuccessfully extracted: '{current_title}'")
-                        choosing_source = False
-                    except Exception as e:
-                        print(f"\nError: {e}")
-                        current_url = None
-                        continue
-                        
-                elif source_choice == '2':
-                    # File mode
-                    html_dir = get_html_articles_dir(config)
-                    
-                    # List HTML files
-                    html_files = [f for f in os.listdir(html_dir) if f.endswith('.html')]
-                    
-                    if not html_files:
-                        print(f"\nNo HTML files found in {html_dir}")
-                        print("Please place HTML files in this directory and try again.")
-                        continue
-                    
-                    selecting_file = True
-                    while selecting_file:
-                        print("\nAvailable HTML files:")
-                        for i, file in enumerate(html_files, 1):
-                            print(f"{i}. {file}")
-                        print("0. Back to main menu")
-                        
-                        try:
-                            file_choice = input("\nEnter file number (0 to go back): ").strip()
-                            
-                            if file_choice == '0':
-                                # Go back to source selection
-                                selecting_file = False
-                                continue
-                                
-                            file_choice = int(file_choice)
-                            if file_choice < 1 or file_choice > len(html_files):
-                                print("Invalid selection. Please try again.")
-                                continue
-                            
-                            current_file = os.path.join(html_dir, html_files[file_choice - 1])
-                            
-                            # Extract article content
-                            try:
-                                current_title, current_content = extract_from_file(current_file)
-                                print(f"\nSuccessfully extracted: '{current_title}'")
-                                selecting_file = False
-                                choosing_source = False
-                            except Exception as e:
-                                print(f"\nError: {e}")
-                                current_file = None
-                                continue
-                                
-                        except ValueError:
-                            print("Invalid input. Please enter a number.")
-                            continue
-                        
-                elif source_choice == '3':
-                    print("Exiting.")
-                    sys.exit(0)
-                    
-                else:
+            # Display menu options and process choice
+            continue_session = self._process_main_menu()
+    
+    def _print_welcome_message(self):
+        """Print the welcome message and usage instructions."""
+        print("\n===== Kindle Article Sender =====")
+        print("\nUsage Instructions:")
+        print("  Interactive Mode: ./kindle_sender.py")
+        print("  Command Line Mode: ./kindle_sender.py [URL] [options]")
+        print("  Help: ./kindle_sender.py --help")
+    
+    def _choose_article_source(self):
+        """Present options to choose an article source."""
+        choosing_source = True
+        
+        while choosing_source:
+            print("\nHow would you like to import an article?")
+            
+            # Display all available sources
+            sources = self.article_manager.get_available_sources()
+            for i, (source_id, source_name) in enumerate(sources, 1):
+                print(f"{i}. From a {source_name}")
+            print(f"{len(sources) + 1}. Exit")
+            
+            source_choice = input(f"\nEnter your choice (1-{len(sources) + 1}): ").strip()
+            
+            # Check for exit option
+            if source_choice == str(len(sources) + 1):
+                print("Exiting.")
+                sys.exit(0)
+            
+            # Validate and process choice
+            try:
+                choice_idx = int(source_choice) - 1
+                if choice_idx < 0 or choice_idx >= len(sources):
                     print("Invalid choice. Please try again.")
                     continue
+                
+                # Get source ID for the selected choice
+                selected_source_id = sources[choice_idx][0]
+                
+                # Handle source-specific import
+                if selected_source_id == "url":
+                    choosing_source = self._handle_url_source()
+                elif selected_source_id == "html_file":
+                    choosing_source = self._handle_file_source()
+                else:
+                    print(f"Support for {sources[choice_idx][1]} is not yet implemented.")
+                    continue
+                    
+            except ValueError:
+                print("Invalid choice. Please enter a number.")
+    
+    def _handle_url_source(self):
+        """Handle URL source selection."""
+        # URL mode
+        self.current_url = input("\nEnter article URL: ").strip()
+        if not self.current_url:
+            print("No URL provided. Returning to source selection.")
+            return True
         
-        # Display menu options
+        # Extract article content
+        try:
+            self.current_title, self.current_content = self.article_manager.extract_from_url(self.current_url)
+            print(f"\nSuccessfully extracted: '{self.current_title}'")
+            return False  # Exit the choosing source loop
+        except Exception as e:
+            print(f"\nError: {e}")
+            self.current_url = None
+            return True  # Stay in the choosing source loop
+    
+    def _handle_file_source(self):
+        """Handle file source selection."""
+        # Get HTML file source for specific methods
+        html_source = self.article_manager.get_html_source()
+        
+        # Get available HTML files
+        html_files = html_source.get_available_files()
+        
+        if not html_source.display_available_files(html_files):
+            return True  # Stay in the choosing source loop if no files available
+        
+        selecting_file = True
+        while selecting_file:
+            try:
+                file_choice = input("\nEnter file number (0 to go back): ").strip()
+                
+                if file_choice == '0':
+                    # Go back to source selection
+                    return True
+                    
+                file_choice = int(file_choice)
+                if file_choice < 1 or file_choice > len(html_files):
+                    print("Invalid selection. Please try again.")
+                    continue
+                
+                file_index = file_choice - 1
+                self.current_file = html_source.get_file_path(file_index, html_files)
+                
+                # Extract article content
+                try:
+                    self.current_title, self.current_content = self.article_manager.extract_from_file_path(self.current_file)
+                    print(f"\nSuccessfully extracted: '{self.current_title}'")
+                    return False  # Exit the choosing source loop
+                except Exception as e:
+                    print(f"\nError: {e}")
+                    self.current_file = None
+                    return True  # Stay in the choosing source loop
+                    
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+    
+    def _process_main_menu(self):
+        """Display main menu and process user choice."""
         print("\nWhat would you like to do?")
-        print("1. Print article content")
-        print("2. Generate ePub file (without sending)")
-        print("3. Send article to Kindle")
-        print("4. Work on a new article")
-        print("5. Exit")
         
-        choice = input("\nEnter your choice (1-5): ").strip()
+        # Display all available output options
+        outputs = self.publication_manager.get_available_outputs()
+        for i, (output_id, output_name) in enumerate(outputs, 1):
+            print(f"{i}. {output_name}")
+            
+        # Additional options
+        print(f"{len(outputs) + 1}. Work on a new article")
+        print(f"{len(outputs) + 2}. Exit")
         
-        if choice == '1':
-            # Print article content
-            print("\n=== Extracted Article ===")
-            print(f"Title: {current_title}\n")
-            print(current_content)
-            print("\n=== End of Article ===")
-            
-        elif choice == '2':
-            # Generate ePub without sending
-            output_dir = input("Enter output directory (or press Enter for default/temp directory): ").strip()
-            source_reference = current_url if current_url else f"Local file: {os.path.basename(current_file)}"
-            output_path = create_epub(current_title, current_content, source_reference, output_dir if output_dir else None, config)
-            print(f"\nePub file generated successfully at: {output_path}")
-            
-        elif choice == '3':
-            # Generate and send to Kindle
-            if not config['Email']['from_email'] or not config['Email']['password'] or not config['Email']['kindle_email']:
-                print("Email configuration incomplete. Please check your .env file.")
-                continue
-                
-            source_reference = current_url if current_url else f"Local file: {os.path.basename(current_file)}"
-            output_path = create_epub(current_title, current_content, source_reference, None, config)
-            
-            print(f"Sending to Kindle email: {config['Email']['kindle_email']}")
-            email_subject = f"Convert: {current_title}"  # "Convert:" prefix tells Amazon to convert the document
-            email_body = f"Article: {current_title}\nSource: {source_reference}\nSent on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            
-            success = send_email(config, email_subject, email_body, output_path)
-            
-            if success:
-                print("\nArticle sent successfully to your Kindle!")
-                # Clean up only if successfully sent
-                os.remove(output_path)
-                
-                # If the source was a file, rename it to avoid sending duplicates
-                if current_file:
-                    current_file = rename_html_file(current_file)
-            else:
-                print("\nFailed to send article. Please check your email settings.")
-                print(f"The ePub file is still available at: {output_path}")
+        choice = input(f"\nEnter your choice (1-{len(outputs) + 2}): ").strip()
         
-        elif choice == '4':
+        # Check for work on new article option
+        if choice == str(len(outputs) + 1):
             # Reset to work on a new article
-            current_url = None
-            current_file = None
-            current_title = None
-            current_content = None
-            continue
-            
-        elif choice == '5':
+            self.reset_article()
+            return True
+        
+        # Check for exit option
+        elif choice == str(len(outputs) + 2):
             print("Exiting.")
-            continue_session = False
+            return False
+        
+        # Process output choice
+        try:
+            choice_idx = int(choice) - 1
+            if choice_idx < 0 or choice_idx >= len(outputs):
+                print("Invalid choice. Please try again.")
+                return True
             
+            # Get output ID for the selected choice
+            selected_output_id = outputs[choice_idx][0]
+            
+            # Handle the selected output
+            source_reference = self.get_source_reference()
+            
+            if selected_output_id == "print":
+                self.publication_manager.print_article(
+                    self.current_title,
+                    self.current_content,
+                    source_reference
+                )
+            elif selected_output_id == "epub":
+                # Ask for output directory
+                output_dir = input("Enter output directory (or press Enter for default/temp directory): ").strip()
+                self.publication_manager.create_epub(
+                    self.current_title,
+                    self.current_content,
+                    source_reference,
+                    output_dir if output_dir else None
+                )
+            elif selected_output_id == "kindle":
+                self.publication_manager.send_to_kindle(
+                    self.current_title,
+                    self.current_content,
+                    source_reference,
+                    self.current_file
+                )
+            else:
+                # Generic handling for new output types
+                self.publication_manager.process_with_output(
+                    selected_output_id,
+                    self.current_title,
+                    self.current_content,
+                    source_reference,
+                    self.current_file
+                )
+                
+        except ValueError:
+            print("Invalid choice. Please enter a number.")
+            return True
+        
+        # After each operation (except for choosing a new article or exit), ask if user wants to continue
+        print("\n")
+        continue_prompt = input("Press Enter to continue or type 'exit' to quit: ").strip().lower()
+        if continue_prompt == 'exit':
+            return False
+        
+        return True
+
+
+class CommandLineMode:
+    """Class to handle command line mode operations."""
+    
+    def __init__(self, args, config):
+        self.args = args
+        self.config = config
+        self.article_manager = ArticleManager(config)
+        self.publication_manager = PublicationManager(config)
+    
+    def run(self):
+        """Run the command line mode operations."""
+        try:
+            # Extract article content
+            title, content, source_reference, source_file = self._extract_article()
+            
+            # Handle debug extraction if requested
+            if self.args.debug_extraction:
+                self.publication_manager.print_article(title, content, source_reference)
+                sys.exit(0)
+            
+            # Handle sending or generating ePub
+            if self.args.no_send:
+                self.publication_manager.create_epub(
+                    title, 
+                    content, 
+                    source_reference, 
+                    self.args.output_dir
+                )
+                print("File was not sent to Kindle as --no-send flag was used.")
+            else:
+                # Send to Kindle
+                self.publication_manager.send_to_kindle(
+                    title,
+                    content,
+                    source_reference,
+                    source_file
+                )
+                
+        except Exception as e:
+            print(f"\nError: {e}")
+            sys.exit(1)
+    
+    def _extract_article(self):
+        """Extract article content based on command line arguments."""
+        if self.args.url:
+            title, content = self.article_manager.extract_from_url(self.args.url)
+            source_reference = self.args.url
+            source_file = None
+        elif self.args.file:
+            title, content = self.article_manager.extract_from_file_path(self.args.file)
+            source_reference = format_source_reference(file_path=self.args.file)
+            source_file = self.args.file
         else:
-            print("Invalid choice. Please try again.")
+            raise ValueError("No URL or file specified")
             
-        # After each operation (except for choosing a new URL/file or exit), ask if user wants to continue
-        if choice not in ['4', '5']:
-            print("\n")
-            continue_prompt = input("Press Enter to continue or type 'exit' to quit: ").strip().lower()
-            if continue_prompt == 'exit':
-                continue_session = False
+        return title, content, source_reference, source_file
+
 
 def main():
+    """Main entry point of the program."""
     parser = argparse.ArgumentParser(description='Send articles to Kindle')
     
     # Create a mutually exclusive group for URL or file
@@ -237,65 +316,12 @@ def main():
 
     # Check if we should run in interactive mode (no arguments provided)
     if not args.url and not args.file:
-        interactive_mode(config)
-        return
-
-    try:
-        # Extract article content
-        if args.url:
-            title, content = extract_article(args.url)
-            source_reference = args.url
-            source_file = None
-        elif args.file:
-            title, content = extract_from_file(args.file)
-            source_reference = f"Local file: {os.path.basename(args.file)}"
-            source_file = args.file
-        else:
-            parser.print_help()
-            sys.exit(1)
-
-        if args.debug_extraction:
-            print("\n=== Extracted Article ===")
-            print(f"Title: {title}\n")
-            print(content)
-            print("\n=== End of Article ===")
-            sys.exit(0)
-
-        # Create ePub file
-        output_path = create_epub(title, content, source_reference, args.output_dir, config)
-
-        if args.no_send:
-            print(f"\nePub file generated successfully at: {output_path}")
-            print("File was not sent to Kindle as --no-send flag was used.")
-        else:
-            # Check if configuration is complete for sending email
-            if not config['Email']['from_email'] or not config['Email']['password'] or not config['Email']['kindle_email']:
-                print("Email configuration incomplete. Please check your .env file.")
-                print(f"ePub file generated successfully at: {output_path}")
-                sys.exit(1)
-
-            # Send email
-            print(f"Sending to Kindle email: {config['Email']['kindle_email']}")
-            email_subject = f"Convert: {title}"  # "Convert:" prefix tells Amazon to convert the document
-            email_body = f"Article: {title}\nSource: {source_reference}\nSent on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-
-            success = send_email(config, email_subject, email_body, output_path)
-
-            if success:
-                print("\nArticle sent successfully to your Kindle!")
-                # Clean up only if successfully sent
-                os.remove(output_path)
-                
-                # If the source was a file, rename it to avoid sending duplicates
-                if source_file:
-                    rename_html_file(source_file)
-            else:
-                print("\nFailed to send article. Please check your email settings.")
-                print(f"The ePub file is still available at: {output_path}")
-
-    except Exception as e:
-        print(f"\nError: {e}")
-        sys.exit(1)
+        interactive = InteractiveMode(config)
+        interactive.run()
+    else:
+        # Run in command line mode
+        command_line = CommandLineMode(args, config)
+        command_line.run()
 
 if __name__ == "__main__":
     main()
