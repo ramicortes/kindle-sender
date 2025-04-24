@@ -3,6 +3,7 @@ import os
 from abc import ABC, abstractmethod
 from article_downloader import extract_article, extract_from_file
 from utils import get_directory_path
+from domain_handlers import domain_registry
 
 class ArticleSource(ABC):
     """Abstract base class for all article sources."""
@@ -34,6 +35,11 @@ class URLSource(ArticleSource):
         """Extract article from URL."""
         if not url:
             raise ValueError("No URL provided.")
+        
+        # Check for domain-specific pre-validation
+        is_valid, message = domain_registry.run_pre_validation(url)
+        if not is_valid:
+            raise ValueError(message)
         
         print("Extracting article content from URL...")
         return extract_article(url), url

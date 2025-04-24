@@ -3,6 +3,9 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import os
 
+# Import domain handlers
+from domain_handlers import domain_registry
+
 # Try to import optional dependencies
 try:
     from newspaper import Article
@@ -26,7 +29,8 @@ def extract_article(url):
 
             if title and content:
                 print(f"Successfully extracted: '{title}'")
-                return title, content
+                # Apply post-processing for the domain
+                return domain_registry.run_post_processing(url, title, content)
         except Exception as e:
             print(f"Newspaper extraction failed: {e}")
 
@@ -45,19 +49,26 @@ def extract_article(url):
         for element in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']):
             element.decompose()
 
-        # Target the main content area
-        main_content = soup.find('div', class_='article-content')  # Replace with actual class or ID if needed
+        # Try to find the main content with different selectors
+        main_content = None
+        for selector in ['article', 'main', '.content', '.article-content', '.post-content']:
+            main_content = soup.select_one(selector)
+            if main_content:
+                break
+                
         if not main_content:
-            raise ValueError("Could not locate main content on the page")
+            # If no common content container found, use the body
+            main_content = soup.body
 
         # Extract paragraphs within the main content
-        content_elements = main_content.find_all(['p', 'h2', 'h3'])
+        content_elements = main_content.find_all(['p', 'h2', 'h3', 'h4'])
         content = "\n\n".join([el.get_text(strip=True) for el in content_elements if el.get_text(strip=True)])
 
         if not title or not content:
             raise ValueError("Could not extract article content")
 
-        return title, content
+        # Apply post-processing for the domain
+        return domain_registry.run_post_processing(url, title, content)
     except Exception as e:
         raise ValueError(f"Failed to extract article content: {e}")
 
@@ -110,8 +121,8 @@ def extract_from_file(file_path):
         if not content:
             raise ValueError("Could not extract article content from the file")
         
-        # Only print 'Successfully extracted' once
-        return title, content
+        # Apply post-processing for the domain
+        return domain_registry.run_post_processing(file_path, title, content)
     
     except Exception as e:
         raise ValueError(f"Failed to extract article content from file: {e}")

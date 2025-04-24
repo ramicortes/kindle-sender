@@ -189,6 +189,41 @@ class InteractiveMode:
                 self.term.inkey(timeout=2)  # 2-second delay to read message
             return True
         
+        # Import domain registry here to minimize circular imports
+        from domain_handlers import domain_registry
+        
+        # Check for domain-specific pre-validation
+        is_valid, message = domain_registry.run_pre_validation(self.current_url)
+        if not is_valid and message:
+            # Display domain-specific warning message
+            print(f"\n{self.term.bright_red}⚠ Domain Warning:{self.term.normal}")
+            print(f"{self.term.bright_yellow}┌{'─' * 50}┐{self.term.normal}")
+            
+            # Format message with word wrapping
+            words = message.split()
+            lines = []
+            current_line = ""
+            for word in words:
+                if len(current_line + " " + word) <= 48:  # Keep space for borders
+                    current_line += " " + word if current_line else word
+                else:
+                    lines.append(current_line)
+                    current_line = word
+            if current_line:
+                lines.append(current_line)
+                
+            # Print wrapped message
+            for line in lines:
+                print(f"{self.term.bright_yellow}│{self.term.normal} {line.ljust(48)} {self.term.bright_yellow}│{self.term.normal}")
+            
+            print(f"{self.term.bright_yellow}└{'─' * 50}┘{self.term.normal}")
+            
+            # Wait for user acknowledgment
+            print(f"\n{self.term.dim}Press any key to return to source selection...{self.term.normal}")
+            with self.term.cbreak():
+                self.term.inkey()
+            return True
+        
         # Show loading indicator
         print(f"\n{self.term.bright_yellow}Extracting article...{self.term.normal}")
         
