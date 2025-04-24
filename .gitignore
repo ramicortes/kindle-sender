@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .env
+html_articles/
+epub_output/
+.DS_Store

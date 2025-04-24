@@ -14,11 +14,15 @@ def load_config():
             'kindle_email': os.getenv('KINDLE_EMAIL', ''),
             'smtp_server': os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
             'smtp_port': os.getenv('SMTP_PORT', '587'),
+        },
+        'Directories': {
+            'html_articles_dir': os.getenv('HTML_ARTICLES_DIR', ''),
+            'epub_output_dir': os.getenv('EPUB_OUTPUT_DIR', ''),
         }
     }
 
     # Validate required fields
     if not config['Email']['from_email'] or not config['Email']['password'] or not config['Email']['kindle_email']:
-        raise ValueError("Missing required email configuration in .env file.")
+        print("Warning: Missing required email configuration in .env file. You won't be able to send to Kindle.")
 
     return config

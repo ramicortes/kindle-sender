@@ -12,7 +12,7 @@ except ImportError:
     print("Install it with: pip install EbookLib")
     sys.exit(1)
 
-def create_epub(title, content, url, output_dir=None):
+def create_epub(title, content, source_reference, output_dir=None, config=None):
     """Create an ePub file with article content."""
     print("Creating ePub file...")
     book = epub.EpubBook()
@@ -26,16 +26,24 @@ def create_epub(title, content, url, output_dir=None):
     book.set_title(title)
     book.set_language('en')
     
-    # Add author as the domain name
-    domain = urlparse(url).netloc
-    book.add_author(domain)
+    # Determine source information
+    if source_reference.startswith("Local file:"):
+        # For local files, use filename as author
+        author = source_reference.replace("Local file: ", "")
+        domain = "Local HTML File"
+    else:
+        # For URLs, use domain as author
+        domain = urlparse(source_reference).netloc
+        author = domain if domain else "Unknown"
+    
+    book.add_author(author)
     
     # Add content
     chapter = epub.EpubHtml(title='Article', file_name='article.xhtml')
     
     # Format content with basic HTML
     formatted_content = f"<h1>{title}</h1>\n"
-    formatted_content += f"<p><i>Source: <a href='{url}'>{domain}</a></i></p>\n"
+    formatted_content += f"<p><i>Source: {domain}</i></p>\n"
     
     # Split content by newlines and format paragraphs/headings
     paragraphs = content.split('\n\n')
@@ -58,13 +66,21 @@ def create_epub(title, content, url, output_dir=None):
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
     
-    # Create output file
+    # Determine output directory
+    # Priority: 1. Function parameter, 2. Config setting, 3. Temp directory
     if output_dir:
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        output_path = os.path.join(output_dir, f"{clean_title}.epub")
+        target_dir = output_dir
+    elif config and config['Directories']['epub_output_dir']:
+        target_dir = config['Directories']['epub_output_dir']
     else:
-        output_path = os.path.join(tempfile.gettempdir(), f"{clean_title}.epub")
+        target_dir = tempfile.gettempdir()
+    
+    # Create directory if it doesn't exist
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    
+    # Create output file path
+    output_path = os.path.join(target_dir, f"{clean_title}.epub")
     
     # Write to file
     epub.write_epub(output_path, book)
