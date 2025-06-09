@@ -42,7 +42,8 @@ class URLSource(ArticleSource):
             raise ValueError(message)
         
         print("Extracting article content from URL...")
-        return extract_article(url), url
+        title, content, author = extract_article(url)
+        return (title, content, author), url
 
 
 class HTMLFileSource(ArticleSource):
@@ -70,7 +71,8 @@ class HTMLFileSource(ArticleSource):
             raise ValueError("No file path provided.")
         
         # Removed duplicate print message
-        return extract_from_file(file_path), file_path
+        title, content, author = extract_from_file(file_path)
+        return (title, content, author), file_path
     
     def get_available_files(self):
         """Get list of available HTML files."""
@@ -142,15 +144,15 @@ class ArticleManager:
     def extract_from_url(self, url):
         """Extract article from URL."""
         url_source = self.source_factory.get_source("url")
-        (title, content), _ = url_source.extract(url)
-        return title, content
+        (title, content, author), _ = url_source.extract(url)
+        return title, content, author
     
     def extract_from_file_path(self, file_path):
         """Extract article from file path."""
         file_source = self.source_factory.get_source("html_file")
-        (title, content), _ = file_source.extract(file_path)
+        (title, content, author), _ = file_source.extract(file_path)
         print(f"Successfully extracted: '{title}'")
-        return title, content
+        return title, content, author
     
     def get_html_source(self):
         """Get HTML file source for accessing its methods."""

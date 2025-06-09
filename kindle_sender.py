@@ -22,6 +22,7 @@ class InteractiveMode:
         self.current_file = None
         self.current_title = None
         self.current_content = None
+        self.current_author = None
         self.term = Terminal()  # Initialize blessed terminal
     
     def reset_article(self):
@@ -30,6 +31,7 @@ class InteractiveMode:
         self.current_file = None
         self.current_title = None
         self.current_content = None
+        self.current_author = None
     
     def get_source_reference(self):
         """Get the source reference for the current article."""
@@ -229,10 +231,12 @@ class InteractiveMode:
         
         # Extract article content
         try:
-            self.current_title, self.current_content = self.article_manager.extract_from_url(self.current_url)
+            self.current_title, self.current_content, self.current_author = self.article_manager.extract_from_url(self.current_url)
             
             # Show success message with article title
             print(f"\n{self.term.bright_green}✓ Successfully extracted:{self.term.normal} {self.term.bold}{self.current_title}{self.term.normal}")
+            if self.current_author:
+                print(f"Author: {self.current_author}")
             
             # Brief pause to show success message
             with self.term.cbreak():
@@ -284,7 +288,7 @@ class InteractiveMode:
         
         # Extract article content
         try:
-            self.current_title, self.current_content = self.article_manager.extract_from_file_path(self.current_file)
+            self.current_title, self.current_content, self.current_author = self.article_manager.extract_from_file_path(self.current_file)
             return False  # Exit the choosing source loop
         except Exception as e:
             print(f"\nError: {e}")
@@ -345,7 +349,8 @@ class InteractiveMode:
             self.publication_manager.print_article(
                 self.current_title,
                 self.current_content,
-                source_reference
+                source_reference,
+                self.current_author
             )
             
         elif selected_output_id == "epub":
@@ -375,7 +380,8 @@ class InteractiveMode:
                 self.current_title,
                 self.current_content,
                 source_reference,
-                output_dir if output_dir else None
+                output_dir if output_dir else None,
+                self.current_author
             )
             
             # Show success message
@@ -394,7 +400,8 @@ class InteractiveMode:
                 self.current_title,
                 self.current_content,
                 source_reference,
-                self.current_file
+                self.current_file,
+                self.current_author
             )
             
             # Show success message
@@ -411,7 +418,8 @@ class InteractiveMode:
                 self.current_title,
                 self.current_content,
                 source_reference,
-                self.current_file
+                self.current_file,
+                self.current_author
             )
         
         # After each operation, ask if user wants to continue with styled prompt
@@ -485,11 +493,11 @@ class CommandLineMode:
         """Run the command line mode operations."""
         try:
             # Extract article content
-            title, content, source_reference, source_file = self._extract_article()
+            title, content, author, source_reference, source_file = self._extract_article()
             
             # Handle debug extraction if requested
             if self.args.debug_extraction:
-                self.publication_manager.print_article(title, content, source_reference)
+                self.publication_manager.print_article(title, content, source_reference, author)
                 sys.exit(0)
             
             # Handle sending or generating ePub
@@ -498,7 +506,8 @@ class CommandLineMode:
                     title, 
                     content, 
                     source_reference, 
-                    self.args.output_dir
+                    self.args.output_dir,
+                    author
                 )
                 print("File was not sent to Kindle as --no-send flag was used.")
             else:
@@ -507,7 +516,8 @@ class CommandLineMode:
                     title,
                     content,
                     source_reference,
-                    source_file
+                    source_file,
+                    author
                 )
                 
         except Exception as e:
@@ -517,17 +527,17 @@ class CommandLineMode:
     def _extract_article(self):
         """Extract article content based on command line arguments."""
         if self.args.url:
-            title, content = self.article_manager.extract_from_url(self.args.url)
+            title, content, author = self.article_manager.extract_from_url(self.args.url)
             source_reference = self.args.url
             source_file = None
         elif self.args.file:
-            title, content = self.article_manager.extract_from_file_path(self.args.file)
+            title, content, author = self.article_manager.extract_from_file_path(self.args.file)
             source_reference = format_source_reference(file_path=self.args.file)
             source_file = self.args.file
         else:
             raise ValueError("No URL or file specified")
             
-        return title, content, source_reference, source_file
+        return title, content, author, source_reference, source_file
 
 
 def main():

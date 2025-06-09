@@ -36,7 +36,7 @@ def sanitize_text_for_kindle(text):
     
     return sanitized
 
-def create_epub(title, content, source_reference, output_dir=None, config=None):
+def create_epub(title, content, source_reference, output_dir=None, config=None, author=None):
     """Create an ePub file with article content."""
     print("Creating ePub file...")
     book = epub.EpubBook()
@@ -48,18 +48,26 @@ def create_epub(title, content, source_reference, output_dir=None, config=None):
     clean_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
     clean_title = re.sub(r'[-\s]+', '-', clean_title)
     
-    # Determine source information
+    # Determine author information
+    if author:
+        # Use the extracted author
+        author = sanitize_text_for_kindle(author)
+    else:
+        # Fallback to determining from source reference (old behavior)
+        if source_reference.startswith("Local file:"):
+            # For local files, use filename as author
+            author = source_reference.replace("Local file: ", "")
+        else:
+            # For URLs, use domain as author
+            domain = urlparse(source_reference).netloc
+            author = domain if domain else "Unknown"
+        author = sanitize_text_for_kindle(author)
+    
+    # Determine domain for display purposes
     if source_reference.startswith("Local file:"):
-        # For local files, use filename as author
-        author = source_reference.replace("Local file: ", "")
         domain = "Local HTML File"
     else:
-        # For URLs, use domain as author
         domain = urlparse(source_reference).netloc
-        author = domain if domain else "Unknown"
-    
-    # Sanitize author
-    author = sanitize_text_for_kindle(author)
     
     # Display and allow overriding of title and author
     print("\n=== Article Information ===")

@@ -15,7 +15,7 @@ class ArticleOutput(ABC):
         pass
     
     @abstractmethod
-    def process(self, title, content, source_reference, source_file=None, **kwargs):
+    def process(self, title, content, source_reference, source_file=None, author=None, **kwargs):
         """Process the article and send it to the output destination.
         
         Args:
@@ -23,6 +23,7 @@ class ArticleOutput(ABC):
             content: The article content
             source_reference: Reference to the source (URL or file path)
             source_file: Original source file path if from a file
+            author: The article author (if extracted)
             **kwargs: Additional parameters specific to the output type
             
         Returns:
@@ -38,11 +39,14 @@ class PrintOutput(ArticleOutput):
     def output_name(self):
         return "Print to Console"
     
-    def process(self, title, content, source_reference, source_file=None, **kwargs):
+    def process(self, title, content, source_reference, source_file=None, author=None, **kwargs):
         """Print article content to the console."""
         print("\n=== Extracted Article ===")
-        print(f"Title: {title}\n")
-        print(content)
+        print(f"Title: {title}")
+        if author:
+            print(f"Author: {author}")
+        print(f"Source: {source_reference}")
+        print("\n" + content)
         print("\n=== End of Article ===")
         return True, None
 
@@ -66,10 +70,10 @@ class EPubOutput(ArticleOutput):
             'epub_output'
         )
     
-    def process(self, title, content, source_reference, source_file=None, **kwargs):
+    def process(self, title, content, source_reference, source_file=None, author=None, **kwargs):
         """Generate an ePub file from the article content."""
         output_dir = kwargs.get('output_dir', self.epub_output_dir)
-        output_path = create_epub(title, content, source_reference, output_dir, self.config)
+        output_path = create_epub(title, content, source_reference, output_dir, self.config, author)
         print(f"\nePub file generated successfully at: {output_path}")
         return True, output_path
 
@@ -85,7 +89,7 @@ class KindleOutput(ArticleOutput):
     def output_name(self):
         return "Send to Kindle"
     
-    def process(self, title, content, source_reference, source_file=None, **kwargs):
+    def process(self, title, content, source_reference, source_file=None, author=None, **kwargs):
         """Create ePub and send to Kindle."""
         # Check email configuration
         if not check_email_config(self.config):
@@ -93,7 +97,7 @@ class KindleOutput(ArticleOutput):
             return False, None
             
         # Create ePub
-        success, output_path = self.epub_generator.process(title, content, source_reference)
+        success, output_path = self.epub_generator.process(title, content, source_reference, author=author)
         if not success:
             return False, None
         
@@ -151,37 +155,40 @@ class PublicationManager:
         """Get list of available output types."""
         return self.output_factory.get_available_outputs()
     
-    def create_epub(self, title, content, source_reference, custom_output_dir=None):
+    def create_epub(self, title, content, source_reference, custom_output_dir=None, author=None):
         """Create an ePub file from the article content."""
         epub_output = self.output_factory.get_output("epub")
         _, output_path = epub_output.process(
             title, 
             content, 
             source_reference, 
+            author=author,
             output_dir=custom_output_dir
         )
         return output_path
     
-    def send_to_kindle(self, title, content, source_reference, source_file=None):
+    def send_to_kindle(self, title, content, source_reference, source_file=None, author=None):
         """Create ePub and send to Kindle."""
         kindle_output = self.output_factory.get_output("kindle")
         return kindle_output.process(
             title,
             content,
             source_reference,
-            source_file
+            source_file,
+            author=author
         )
     
-    def print_article(self, title, content, source_reference):
+    def print_article(self, title, content, source_reference, author=None):
         """Print article content to console."""
         print_output = self.output_factory.get_output("print")
         return print_output.process(
             title,
             content,
-            source_reference
+            source_reference,
+            author=author
         )
     
-    def process_with_output(self, output_type, title, content, source_reference, source_file=None, **kwargs):
+    def process_with_output(self, output_type, title, content, source_reference, source_file=None, author=None, **kwargs):
         """Process article with the specified output type."""
         output = self.output_factory.get_output(output_type)
         return output.process(
@@ -189,5 +196,6 @@ class PublicationManager:
             content,
             source_reference,
             source_file,
+            author=author,
             **kwargs
         )
