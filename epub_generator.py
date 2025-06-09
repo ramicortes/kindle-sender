@@ -3,6 +3,7 @@ import re
 import tempfile
 from urllib.parse import urlparse
 import sys
+import unicodedata
 
 try:
     import ebooklib
@@ -12,10 +13,36 @@ except ImportError:
     print("Install it with: pip install EbookLib")
     sys.exit(1)
 
+def sanitize_text_for_kindle(text):
+    """
+    Sanitize text by removing or replacing problematic characters for Kindle.
+    This converts accented characters to their base equivalents and removes other special characters.
+    """
+    if not text:
+        return text
+    
+    # Normalize unicode characters (NFD = decomposed form)
+    normalized = unicodedata.normalize('NFD', text)
+    
+    # Remove combining characters (accents, etc.) and keep only ASCII
+    ascii_text = ''.join(char for char in normalized if unicodedata.category(char) != 'Mn')
+    
+    # Additional cleanup: replace remaining problematic characters
+    # Keep alphanumeric, spaces, hyphens, underscores, and basic punctuation
+    sanitized = re.sub(r'[^\w\s\-.,!?():;]', '', ascii_text)
+    
+    # Clean up multiple spaces
+    sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+    
+    return sanitized
+
 def create_epub(title, content, source_reference, output_dir=None, config=None):
     """Create an ePub file with article content."""
     print("Creating ePub file...")
     book = epub.EpubBook()
+    
+    # Sanitize title and author early to avoid issues
+    title = sanitize_text_for_kindle(title)
     
     # Clean title for filename
     clean_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
@@ -31,6 +58,9 @@ def create_epub(title, content, source_reference, output_dir=None, config=None):
         domain = urlparse(source_reference).netloc
         author = domain if domain else "Unknown"
     
+    # Sanitize author
+    author = sanitize_text_for_kindle(author)
+    
     # Display and allow overriding of title and author
     print("\n=== Article Information ===")
     print(f"Title: {title}")
@@ -41,14 +71,18 @@ def create_epub(title, content, source_reference, output_dir=None, config=None):
     if override == 'y':
         new_title = input(f"Enter new title (or press Enter to keep '{title}'): ").strip()
         if new_title:
-            title = new_title
+            title = sanitize_text_for_kindle(new_title)  # Sanitize user input
             # Update clean title for filename
             clean_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
             clean_title = re.sub(r'[-\s]+', '-', clean_title)
         
         new_author = input(f"Enter new author (or press Enter to keep '{author}'): ").strip()
         if new_author:
-            author = new_author
+            author = sanitize_text_for_kindle(new_author)  # Sanitize user input
+    
+    # Show final sanitized values if they were changed during sanitization
+    print(f"\nFinal sanitized title: {title}")
+    print(f"Final sanitized author: {author}")
     
     # Set metadata
     book.set_identifier(f"article_{hash(title)}")
