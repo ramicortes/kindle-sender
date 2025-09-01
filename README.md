@@ -23,8 +23,10 @@ A Python application that extracts articles from web URLs or local HTML files an
 ### 1. Clone or Download the Project
 
 ```bash
-git clone <repository-url>
-cd "Kindle Sender"
+git clone https://github.com/ramicortes/kindle-sender
+# or
+git clone git@github.com:ramicortes/kindle-sender.git
+cd kindle-sender
 ```
 
 Or download and extract the ZIP file to your desired location.
